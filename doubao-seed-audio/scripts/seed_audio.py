@@ -264,9 +264,9 @@ def parse_voice_rows(text: str) -> list[dict[str, str]]:
 def command_voices(args: argparse.Namespace) -> None:
     if not VOICE_LIST.exists():
         raise SystemExit(
-            "Voice list not bundled in this public package. "
-            "Consult the current Volcano OpenSpeech console/docs for voice IDs, "
-            "or add references/official-voice-list.md locally."
+            "Voice list not found. This public package normally includes a compact starter list at "
+            "references/official-voice-list.md. For the latest full official list, see "
+            "https://www.volcengine.com/docs/6561/1257544?lang=zh."
         )
     rows = parse_voice_rows(VOICE_LIST.read_text(encoding="utf-8-sig"))
     query = (args.query or "").lower()
@@ -357,7 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
     common_generate_options(generate)
     generate.set_defaults(func=command_generate)
 
-    voices = sub.add_parser("voices", help="Search the bundled official voice list.")
+    voices = sub.add_parser("voices", help="Search the bundled starter voice list.")
     voices.add_argument("--query", default="", help="Search text across name, voice_type, language, scene, and tags.")
     voices.add_argument("--scene", default="", help="Filter by scene text, e.g. 视频配音 or 角色扮演.")
     voices.add_argument("--limit", type=int, default=40)

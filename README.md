@@ -21,6 +21,7 @@ doubao-seed-audio/
   SKILL.md
   agents/openai.yaml
   references/api-quickref.md
+  references/official-voice-list.md
   scripts/seed_audio.py
 ```
 
@@ -99,7 +100,25 @@ python doubao-seed-audio/scripts/seed_audio.py generate \
 
 ## Voice List
 
-The private/local version may include a large official voice list for convenience. This public package does not vendor that large official table. Consult the current Volcano OpenSpeech console/docs for the latest voice IDs, then pass the selected ID with `--speaker`.
+This public package includes a compact starter voice list at:
+
+```text
+doubao-seed-audio/references/official-voice-list.md
+```
+
+Search it with:
+
+```bash
+python doubao-seed-audio/scripts/seed_audio.py voices --query 女声 --limit 20
+```
+
+For the latest full official voice list, see:
+
+```text
+https://www.volcengine.com/docs/6561/1257544?lang=zh
+```
+
+Pass the selected ID with `--speaker`. Prefer `uranus_bigtts` or `ICL_uranus..._tob` voice IDs with `seed-audio-1.0`.
 
 ## Privacy And Safety
 

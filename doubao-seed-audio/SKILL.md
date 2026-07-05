@@ -55,6 +55,12 @@ Generate voiceover with a speaker ID:
 python doubao-seed-audio/scripts/seed_audio.py generate --prompt "Only read: The city wakes under the first snow." --speaker zh_female_wenrouxiaoya_uranus_bigtts --enable-subtitle --format mp3
 ```
 
+Search the bundled starter voice list:
+
+```powershell
+python doubao-seed-audio/scripts/seed_audio.py voices --query 女声 --limit 20
+```
+
 Use reference audio:
 
 ```powershell
@@ -82,8 +88,9 @@ python doubao-seed-audio/scripts/seed_audio.py generate --prompt "test" --dry-ru
 
 ## Voice List
 
-This public package does not vendor the large official voice list. Consult current Volcano OpenSpeech docs/console for the latest voice IDs, then pass a selected ID with `--speaker`.
+Use `references/official-voice-list.md` as a compact starter list. For the latest full official list, use `https://www.volcengine.com/docs/6561/1257544?lang=zh`, then pass a selected ID with `--speaker`. Prefer `uranus_bigtts` or `ICL_uranus..._tob` voice IDs with `seed-audio-1.0`.
 
 ## References
 
 - Read `references/api-quickref.md` for payload fields, examples, response handling, and prompt guidance.
+- Read `references/official-voice-list.md` only when selecting a bundled starter speaker ID.
