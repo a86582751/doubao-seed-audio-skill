@@ -31,6 +31,12 @@ Core request:
 }
 ```
 
+Generation modes:
+
+- Pure text generation: omit `references`; generate from `text_prompt`.
+- Reference audio generation: include up to three audio references. A `speaker` voice ID is also an audio reference. Local/inline audio references correspond to `@音频1`, `@音频2`, etc. by order.
+- Reference image generation: include exactly one image reference and synthesize audio according to `text_prompt`.
+
 Speaker TTS:
 
 ```json

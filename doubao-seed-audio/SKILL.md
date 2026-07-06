@@ -111,12 +111,26 @@ python doubao-seed-audio/scripts/seed_audio.py generate --prompt "test" --dry-ru
 
 ## Workflow
 
-1. For single Seedance clips, native Seedance audio may be enough.
-2. For multi-segment videos, generate one coherent final soundtrack after the visual edit.
-3. For one-prompt mixed scenes, use the Audio Director Prompting structure above and keep the prompt within the provider limit.
-4. Use separate prompts or stems when dialogue, ambience, and effects need independent timing.
-5. For exact dialogue or narration, keep each request short, use explicit "只朗读...读完立即停止" wording or `--strict-tts`, and verify the returned subtitle/audio.
-6. Use `mux` or FFmpeg to attach the final audio to the video.
+1. Choose the mode:
+   - Pure text generation: pass only `--prompt` / `--prompt-file`; the payload omits `references`.
+   - Reference audio generation: pass `--speaker`, `--audio`, or `--audio-url`. Speaker IDs count as audio references. Use `@音频1`, `@音频2`, etc. in prompt text for audio files/URLs according to reference order.
+   - Reference image generation: pass `--image` or `--image-url`; the prompt describes the audio to synthesize from the image.
+2. For single Seedance clips, native Seedance audio may be enough.
+3. For multi-segment videos, generate one coherent final soundtrack after the visual edit.
+4. For one-prompt mixed scenes, use the Audio Director Prompting structure above and keep the prompt within the provider limit.
+5. Use separate prompts or stems when dialogue, ambience, and effects need independent timing.
+6. For exact dialogue or narration, keep each request short, use explicit "只朗读...读完立即停止" wording or `--strict-tts`, and verify the returned subtitle/audio.
+7. Use `mux` or FFmpeg to attach the final audio to the video.
+
+## Constraints
+
+- Model: `seed-audio-1.0`.
+- Max `text_prompt`: 2048 characters.
+- Max generated audio: 120 seconds.
+- Reference audio: up to 3 items total, including speaker IDs; local files are checked for 30 seconds and 10 MB; formats `wav`, `mp3`, `pcm`, `ogg_opus`.
+- Reference image: exactly one at most, up to 10 MB; formats `jpeg`, `png`, `webp`.
+- Do not mix image references with speaker/audio references.
+- For each reference entry, use only one of `speaker`, `audio_data`, or `audio_url`; for image use one of `image_data` or `image_url`.
 
 ## Voice List
 

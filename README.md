@@ -63,6 +63,12 @@ Do not use the Volcano Ark `SEEDANCE_API_KEY` as the Seed Audio key. Ark keys ar
 
 ## Quick Start
 
+The CLI supports the three official Seed Audio modes:
+
+- Pure text generation: use only `--prompt` / `--prompt-file`.
+- Reference audio generation: use `--speaker`, `--audio`, or `--audio-url`; speaker IDs count as audio references.
+- Reference image generation: use `--image` or `--image-url`.
+
 Generate ambience:
 
 ```bash

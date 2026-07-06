@@ -27,6 +27,11 @@ VOICE_LIST = SKILL_DIR / "references" / "official-voice-list.md"
 DEFAULT_BASE_URL = "https://openspeech.bytedance.com"
 DEFAULT_CREATE_PATH = "/api/v3/tts/create"
 DEFAULT_MODEL = "seed-audio-1.0"
+MAX_TEXT_PROMPT_CHARS = 2048
+MAX_REFERENCE_BYTES = 10 * 1024 * 1024
+MAX_AUDIO_REFERENCE_SECONDS = 30.0
+ALLOWED_AUDIO_SUFFIXES = {".wav", ".mp3", ".pcm", ".ogg", ".opus", ".ogg_opus"}
+ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def load_env_files(paths: list[Path] = ENV_FILES) -> dict[str, str]:
@@ -84,10 +89,86 @@ def media_b64(path: str) -> str:
     return base64.b64encode(data).decode("ascii")
 
 
+def find_ffprobe() -> str:
+    direct = shutil.which("ffprobe")
+    if direct:
+        return direct
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg:
+        sibling = Path(ffmpeg).with_name("ffprobe.exe")
+        if sibling.exists():
+            return str(sibling)
+    return ""
+
+
+def audio_duration_seconds(path: Path) -> float | None:
+    ffprobe = find_ffprobe()
+    if not ffprobe:
+        return None
+    cmd = [
+        ffprobe,
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(path),
+    ]
+    try:
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=15)
+        return float(result.stdout.strip())
+    except Exception:
+        return None
+
+
+def validate_local_reference(path_text: str, kind: str) -> None:
+    path = Path(path_text)
+    if not path.exists():
+        raise SystemExit(f"Reference {kind} not found: {path}")
+    if not path.is_file():
+        raise SystemExit(f"Reference {kind} is not a file: {path}")
+    suffix = path.suffix.lower()
+    if kind == "audio":
+        allowed = ALLOWED_AUDIO_SUFFIXES
+        allowed_text = "wav/mp3/pcm/ogg_opus"
+    else:
+        allowed = ALLOWED_IMAGE_SUFFIXES
+        allowed_text = "jpeg/png/webp"
+    if suffix not in allowed:
+        raise SystemExit(f"Unsupported reference {kind} format: {path.name}. Expected {allowed_text}.")
+    size = path.stat().st_size
+    if size > MAX_REFERENCE_BYTES:
+        raise SystemExit(f"Reference {kind} exceeds 10 MB: {path}")
+    if kind == "audio":
+        duration = audio_duration_seconds(path)
+        if duration is not None and duration > MAX_AUDIO_REFERENCE_SECONDS:
+            raise SystemExit(f"Reference audio exceeds 30 seconds ({duration:.2f}s): {path}")
+
+
+def validate_reference_args(args: argparse.Namespace) -> None:
+    speakers = args.speaker or []
+    audio_files = args.audio or []
+    audio_urls = args.audio_url or []
+    audio_ref_count = len(audio_files) + len(audio_urls) + len(speakers)
+    image_ref_count = (1 if args.image else 0) + (1 if args.image_url else 0)
+    if audio_ref_count and image_ref_count:
+        raise SystemExit("Image references cannot be mixed with speaker/audio references.")
+    if audio_ref_count > 3:
+        raise SystemExit("At most three audio references are supported, including speaker IDs.")
+    if image_ref_count > 1:
+        raise SystemExit("At most one reference image is supported.")
+    for path in audio_files:
+        validate_local_reference(path, "audio")
+    if args.image:
+        validate_local_reference(args.image, "image")
+
+
 def build_references(args: argparse.Namespace) -> list[dict[str, Any]]:
+    validate_reference_args(args)
     refs: list[dict[str, Any]] = []
-    if args.speaker:
-        refs.append({"speaker": args.speaker})
+    for speaker in args.speaker or []:
+        refs.append({"speaker": speaker})
     for url in args.audio_url or []:
         refs.append({"audio_url": url})
     for path in args.audio or []:
@@ -100,8 +181,8 @@ def build_references(args: argparse.Namespace) -> list[dict[str, Any]]:
     image_like = [r for r in refs if "image_url" in r or "image_data" in r]
     if audio_like and image_like:
         raise SystemExit("Image references cannot be mixed with speaker/audio references.")
-    if len([r for r in refs if "audio_url" in r or "audio_data" in r]) > 3:
-        raise SystemExit("At most three reference audio files/URLs are supported.")
+    if len(audio_like) > 3:
+        raise SystemExit("At most three audio references are supported, including speaker IDs.")
     if len(image_like) > 1:
         raise SystemExit("At most one reference image is supported.")
     return refs
@@ -113,6 +194,8 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         raise SystemExit("A prompt is required. Use --prompt or --prompt-file.")
     if getattr(args, "strict_tts", False):
         prompt = f"请严格只朗读以下文本，不要续写、不要改写、不要添加任何内容：\n“{prompt}”"
+    if len(prompt) > MAX_TEXT_PROMPT_CHARS:
+        raise SystemExit(f"text_prompt exceeds {MAX_TEXT_PROMPT_CHARS} characters after wrapping.")
     payload: dict[str, Any] = {
         "model": args.model,
         "text_prompt": prompt,
@@ -323,7 +406,7 @@ def command_mux(args: argparse.Namespace) -> None:
 def common_generate_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--prompt", help="Text prompt or text to synthesize.")
     parser.add_argument("--prompt-file", help="UTF-8 text file containing the prompt.")
-    parser.add_argument("--speaker", help="Voice type ID from the official voice list.")
+    parser.add_argument("--speaker", action="append", help="Voice type ID from the official voice list. Repeat when multiple speaker references are needed.")
     parser.add_argument("--strict-tts", action="store_true", help="Wrap prompt to force exact read-aloud without creative continuation.")
     parser.add_argument("--audio", action="append", help="Reference audio file path. Repeat up to three times.")
     parser.add_argument("--audio-url", action="append", help="Reference audio URL. Repeat up to three times.")
@@ -357,7 +440,7 @@ def build_parser() -> argparse.ArgumentParser:
     common_generate_options(generate)
     generate.set_defaults(func=command_generate)
 
-    voices = sub.add_parser("voices", help="Search the bundled starter voice list.")
+    voices = sub.add_parser("voices", help="Search the bundled official voice list.")
     voices.add_argument("--query", default="", help="Search text across name, voice_type, language, scene, and tags.")
     voices.add_argument("--scene", default="", help="Filter by scene text, e.g. 视频配音 or 角色扮演.")
     voices.add_argument("--limit", type=int, default=40)
