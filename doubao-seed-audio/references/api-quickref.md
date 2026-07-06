@@ -80,6 +80,15 @@ Response fields:
 Prompt guidance:
 
 - For ambience/effects, specify duration, acoustic sources, distance, density, and exclusions: "no music, no narration, no melody".
+- For finished mixed scenes, write an audio-director cue sheet: persistent environment, music bed, chronological sound cues, speaker labels with age/accent/timbre/emotion, exact quoted dialogue, interleaved effects, closing cue, and final constraints.
+- Put sound effects where they should happen rather than collecting them at the end. Example pattern: `背景持续有...，音乐以...铺底。先是...。男子1（中年男性，台湾口音，嗓音低沉）用严肃语气说道："..."。对话中夹杂...。随后...。人声清楚靠前，不要让噪声盖住台词。`
+- For multi-character dialogue, keep labels stable (`男子1`, `女子1`, `旁白`, `远端通话者`) and give each role distinct age, accent, timbre, and emotional state.
 - For exact voiceover, use short prompts and explicit wording: "只朗读：...。读完立即停止，不要添加其它内容。" Verify returned subtitles/audio because `seed-audio-1.0` can creatively continue medium-length speaker prompts.
 - For reference audio, explicitly cite `@音频1`, `@音频2`, or `@音频3`.
-- For video post-production, generate ambience and dialogue as separate files when possible, then mix/mux outside the generation API.
+- For video post-production, generate one coherent mixed track when the scene is short and the prompt is not dense; generate ambience, dialogue, Foley, and music-like beds as separate stems when timing, edits, or loudness need control.
+
+Director prompt skeleton:
+
+```text
+背景持续有[环境底噪]，音乐以[主奏/铺底乐器]为主，加入[辅助乐器/打击乐]，整体情绪[情绪]。先是[开场声效]，随后[动作/转场]。[角色1]（[年龄/性别/口音/音色/气质]）用[情绪]语气说道："[台词]"。对话中夹杂[声效]。[角色2]（[年龄/性别/口音/音色/气质]）用[情绪]语气说道："[台词]"。随后出现[结尾声效/环境变化]。人声清楚靠前，不要让噪声盖住台词，不要添加额外旁白。
+```

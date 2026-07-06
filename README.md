@@ -9,6 +9,7 @@ Keywords: Codex skill, Doubao Seed Audio, Volcano OpenSpeech, AI audio generatio
 ## What It Does
 
 - Generate speech, voiceover, dialogue, ambience, sound effects, and music-like beds.
+- Write finished mixed audio scenes with audio-director prompts: environment, music, chronological sound cues, speaker traits, exact dialogue, interleaved effects, and final constraints.
 - Use speaker IDs, reference audio, or a reference image when supported.
 - Generate subtitles/timestamps when requested.
 - Mux generated audio into a video with FFmpeg.
@@ -78,6 +79,15 @@ python doubao-seed-audio/scripts/seed_audio.py generate \
   --prompt "Only read this sentence: The city wakes under the first snow." \
   --speaker zh_female_wenrouxiaoya_uranus_bigtts \
   --enable-subtitle \
+  --format mp3 \
+  --output-dir outputs
+```
+
+Generate a mixed audio scene:
+
+```bash
+python doubao-seed-audio/scripts/seed_audio.py generate \
+  --prompt "背景持续有雨声、手持对讲机底噪和远处警笛，音乐以极弱的低频合成器pad铺底。先是一声频道扫描。男子1（中年男性，标准普通话，嗓音低沉，沉稳但警惕）压低声音说道：'三号巡查组，请报告你们的位置。' 现场记者（青年女性，气息急促，努力保持专业）回答：'我们在西桥下方，路面有大量遗弃车辆。' 对话中夹杂两次短促电台断续和远处金属撞击声。最后通话中断。人声清楚靠前，不要让噪声盖住台词。" \
   --format mp3 \
   --output-dir outputs
 ```
