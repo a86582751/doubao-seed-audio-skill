@@ -9,6 +9,8 @@ Use this skill for Volcano OpenSpeech `seed-audio-1.0` non-streaming audio gener
 
 ## Audio Director Prompting
 
+This is the canonical prompt guide for Seed Audio. Downstream skills such as `doubao-seedance-video` and radio/podcast skills should link here instead of duplicating the full grammar.
+
 For finished audio scenes, write prompts like an audio-director cue sheet rather than a loose summary. This is the preferred style for radio drama, podcasts, fictional broadcasts, product ads, game scenes, and final Seedance soundtracks.
 
 Use this order:
