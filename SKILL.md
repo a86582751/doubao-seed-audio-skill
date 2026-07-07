@@ -5,7 +5,7 @@ description: Generate, download, subtitle, and mux audio with Volcano OpenSpeech
 
 # Doubao Seed Audio
 
-Use this skill for Volcano OpenSpeech `seed-audio-1.0` non-streaming audio generation. The interface can create speech, voiceover, dialogue, environmental sound, sound effects, and reference-guided audio up to 120 seconds.
+Use this skill for Volcano OpenSpeech `seed-audio-1.0` non-streaming audio generation. The interface can create speech, voiceover, dialogue, environmental sound, sound effects, and reference-guided audio up to 120 seconds per request. For longer programs, generate natural segments and assemble them with FFmpeg instead of compressing the script into one overstuffed prompt.
 
 ## Model Positioning
 
@@ -43,6 +43,19 @@ Example:
 ```
 
 For exact narration or TTS tests, do not use the full director grammar. Use `--strict-tts` or explicit wording such as `只朗读：...读完立即停止，不要添加其它内容。`
+
+## Long Audio Segmentation
+
+Seed Audio is excellent at one-prompt finished scenes, but the per-request audio limit is 120 seconds. For multi-minute podcasts, fictional broadcasts, audio dramas, explainers, or long Seedance soundtracks, prefer a segmented workflow:
+
+1. Split the approved script at natural audio breaks: station IDs, EAS tones, phone inserts, field reports, scene changes, music bridges, ambience beats, signal loss/reconnect, or cliffhangers.
+2. Write one Audio Director prompt per segment. Keep the same speaker ID/reference and repeat a brief continuity note in each part.
+3. End segments with stitch-friendly tails such as static, room tone, channel scan, phone dropout, music bed, or fade. Start the next segment with a matching head.
+4. Generate each part separately and QA weak parts before assembling.
+5. Use FFmpeg concat for hard cuts at silence/static, or short `acrossfade` only over ambience/music/static. Avoid crossfading spoken words.
+6. Run a final listen or multimodal feedback pass on the assembled output.
+
+Use a single prompt when the target is a short draft, trailer, micro-scene, or a complete piece under roughly two minutes. Use segmentation when the writing would become rushed or thin just to fit one request.
 
 ## Tool
 
@@ -146,7 +159,7 @@ python C:\Users\isund\.codex\skills\doubao-seed-audio\scripts\seed_audio.py gene
    - Reference audio generation: pass `--speaker`, `--audio`, or `--audio-url`. Speaker IDs count as audio references. Use `@音频1`, `@音频2`, etc. in prompt text for audio files/URLs according to reference order.
    - Reference image generation: pass `--image` or `--image-url`; the prompt describes the audio to synthesize from the image.
 2. Search `references/official-voice-list.md` with `voices` when the user asks for a role, accent, gender, scene, or emotion. Prefer `uranus_bigtts` or `ICL_uranus..._tob` voice IDs for this new API; older `moon_bigtts` / `mars_bigtts` IDs may appear in the official list but can be rejected by `seed-audio-1.0`.
-3. For one-prompt mixed scenes, use the Audio Director Prompting structure above and keep the full prompt within the provider limit.
+3. For one-prompt mixed scenes, use the Audio Director Prompting structure above and keep the full prompt within the provider limit. For longer works, create a segment map and one prompt per segment, then assemble with FFmpeg.
 4. Use `--enable-subtitle` when timing is needed for subtitles or lip-sync planning.
 5. For exact dialogue, keep each request short, use explicit "只朗读...读完立即停止" wording or `--strict-tts`, and verify the returned subtitle/audio. `seed-audio-1.0` can creatively continue medium-length speaker prompts even with strict wording.
 6. Keep generated outputs under the active thread `outputs` directory when possible.
