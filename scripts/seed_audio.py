@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import concurrent.futures
 import json
 import mimetypes
 import os
@@ -292,11 +293,18 @@ def save_audio(result: dict[str, Any], output_dir: Path, name: str, fmt: str, ti
     return None
 
 
-def command_generate(args: argparse.Namespace) -> None:
+def generate_once(args: argparse.Namespace, prompt_file: str = "", prompt_text: str = "", name_suffix: str = "") -> dict[str, Any]:
     api_key = env("SEED_AUDIO_API_KEY", "", "SPEECH_API_KEY", "X_API_KEY")
     base_url = env("SEED_AUDIO_BASE_URL", DEFAULT_BASE_URL, "SPEECH_BASE_URL")
     path = env("SEED_AUDIO_CREATE_PATH", DEFAULT_CREATE_PATH, "SPEECH_CREATE_PATH")
-    payload = build_payload(args)
+    task_args = argparse.Namespace(**vars(args))
+    if prompt_file:
+        task_args.prompt_file = prompt_file
+        task_args.prompt = None
+    if prompt_text:
+        task_args.prompt = prompt_text
+        task_args.prompt_file = None
+    payload = build_payload(task_args)
     if args.show_config:
         print(json.dumps({
             "api_key": mask_secret(api_key),
@@ -305,16 +313,18 @@ def command_generate(args: argparse.Namespace) -> None:
             "model": args.model,
         }, ensure_ascii=False, indent=2))
     if args.dry_run:
-        print(json.dumps(scrub_payload(payload), ensure_ascii=False, indent=2))
-        return
+        return {"payload": scrub_payload(payload), "prompt_file": prompt_file or None}
     if not api_key:
         raise SystemExit("Missing SEED_AUDIO_API_KEY or SPEECH_API_KEY.")
     result, meta = call_create(payload, api_key, base_url, path, args.timeout)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", args.name or "seed_audio").strip("_") or "seed_audio"
+    base_name = args.name or (Path(prompt_file).stem if prompt_file else "seed_audio")
+    if name_suffix:
+        base_name = f"{base_name}_{name_suffix}"
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", base_name).strip("_") or "seed_audio"
     name = f"{stamp}_{safe}"
     output_dir = Path(args.output_dir)
-    audio_path = save_audio(result, output_dir, name, args.format, args.timeout)
+    audio_path = save_audio(result, output_dir, name, task_args.format, args.timeout)
     summary = {
         "meta": meta,
         "code": result.get("code"),
@@ -326,10 +336,95 @@ def command_generate(args: argparse.Namespace) -> None:
         "audio_path": str(audio_path) if audio_path else None,
         "subtitle": result.get("subtitle"),
         "payload": scrub_payload(payload),
+        "prompt_file": prompt_file or None,
     }
     summary_path = output_dir / f"{name}.json"
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    return summary
+
+
+def command_generate(args: argparse.Namespace) -> None:
+    summary = generate_once(args)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+
+
+def collect_batch_prompt_files(args: argparse.Namespace) -> list[Path]:
+    files: list[Path] = []
+    if args.prompt_list:
+        for raw_line in Path(args.prompt_list).read_text(encoding="utf-8-sig").splitlines():
+            line = raw_line.strip()
+            if line and not line.startswith("#"):
+                files.append(Path(line))
+    for item in args.prompt_files or []:
+        files.append(Path(item))
+    if args.prompt_file:
+        files.append(Path(args.prompt_file))
+    if args.prompt_dir:
+        files.extend(sorted(Path(args.prompt_dir).glob(args.prompt_glob)))
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for file in files:
+        path = file.expanduser().resolve()
+        if path in seen:
+            continue
+        if not path.exists():
+            raise SystemExit(f"Prompt file not found: {path}")
+        if not path.is_file():
+            raise SystemExit(f"Prompt path is not a file: {path}")
+        seen.add(path)
+        unique.append(path)
+    if not unique and args.prompt:
+        return []
+    if not unique:
+        raise SystemExit("Provide --prompt-files, --prompt-list, --prompt-dir, --prompt-file, or --prompt.")
+    return unique
+
+
+def command_batch_generate(args: argparse.Namespace) -> None:
+    prompt_files = collect_batch_prompt_files(args)
+    if args.show_config:
+        print(json.dumps({
+            "api_key": mask_secret(env("SEED_AUDIO_API_KEY", "", "SPEECH_API_KEY", "X_API_KEY")),
+            "base_url": env("SEED_AUDIO_BASE_URL", DEFAULT_BASE_URL, "SPEECH_BASE_URL"),
+            "path": env("SEED_AUDIO_CREATE_PATH", DEFAULT_CREATE_PATH, "SPEECH_CREATE_PATH"),
+            "model": args.model,
+            "jobs": args.jobs,
+        }, ensure_ascii=False, indent=2))
+        args.show_config = False
+    if not prompt_files:
+        summary = generate_once(args, prompt_text=args.prompt, name_suffix="part01")
+        print(json.dumps({"jobs": 1, "results": [summary]}, ensure_ascii=False, indent=2))
+        return
+    jobs = max(1, min(args.jobs, len(prompt_files)))
+    results: list[dict[str, Any] | None] = [None] * len(prompt_files)
+
+    def run(index_and_path: tuple[int, Path]) -> dict[str, Any]:
+        index, path = index_and_path
+        suffix = f"part{index + 1:02d}_{path.stem}"
+        return generate_once(args, prompt_file=str(path), name_suffix=suffix)
+
+    if args.dry_run:
+        for index, path in enumerate(prompt_files):
+            results[index] = run((index, path))
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
+            future_map = {executor.submit(run, item): item[0] for item in enumerate(prompt_files)}
+            for future in concurrent.futures.as_completed(future_map):
+                index = future_map[future]
+                results[index] = future.result()
+    completed = [item for item in results if item is not None]
+    batch_summary = {
+        "jobs": jobs,
+        "count": len(completed),
+        "audio_paths": [item.get("audio_path") for item in completed if item.get("audio_path")],
+        "results": completed,
+    }
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = output_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.name or 'seed_audio_batch'}.batch.json"
+    summary_path.write_text(json.dumps(batch_summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    batch_summary["summary_path"] = str(summary_path)
+    print(json.dumps(batch_summary, ensure_ascii=False, indent=2))
 
 
 def parse_voice_rows(text: str) -> list[dict[str, str]]:
@@ -455,6 +550,15 @@ def build_parser() -> argparse.ArgumentParser:
     generate = sub.add_parser("generate", help="Create speech, sound effects, ambience, or audio from references.")
     common_generate_options(generate)
     generate.set_defaults(func=command_generate)
+
+    batch_generate = sub.add_parser("batch-generate", help="Create multiple Seed Audio segments in parallel from prompt files.")
+    common_generate_options(batch_generate)
+    batch_generate.add_argument("--prompt-files", action="append", help="Prompt file path. Repeat in desired output order.")
+    batch_generate.add_argument("--prompt-list", help="Text file containing one prompt-file path per line.")
+    batch_generate.add_argument("--prompt-dir", help="Directory of prompt files to generate.")
+    batch_generate.add_argument("--prompt-glob", default="*.txt", help="Glob used with --prompt-dir.")
+    batch_generate.add_argument("--jobs", type=int, default=int(env("SEED_AUDIO_BATCH_JOBS", "3")), help="Parallel generation jobs.")
+    batch_generate.set_defaults(func=command_batch_generate)
 
     voices = sub.add_parser("voices", help="Search the bundled official voice list.")
     voices.add_argument("--query", default="", help="Search text across name, voice_type, language, scene, and tags.")

@@ -5,7 +5,7 @@ description: Generate, download, subtitle, and mux audio with Volcano OpenSpeech
 
 # Doubao Seed Audio
 
-Use this skill for Volcano OpenSpeech `seed-audio-1.0` non-streaming audio generation. The interface can create speech, voiceover, dialogue, environmental sound, sound effects, and reference-guided audio up to 120 seconds per request. For longer programs, generate natural segments and assemble them with FFmpeg instead of compressing the script into one overstuffed prompt.
+Use this skill for Volcano OpenSpeech `seed-audio-1.0` non-streaming audio generation. The interface can create speech, voiceover, dialogue, environmental sound, sound effects, and reference-guided audio up to 120 seconds per request. For longer programs, generate natural segments and assemble them with FFmpeg instead of compressing the script into one overstuffed prompt. When segments are independent, launch them in parallel with `batch-generate` to save wall-clock time.
 
 ## Model Positioning
 
@@ -51,7 +51,7 @@ Seed Audio is excellent at one-prompt finished scenes, but the per-request audio
 1. Split the approved script at natural audio breaks: station IDs, EAS tones, phone inserts, field reports, scene changes, music bridges, ambience beats, signal loss/reconnect, or cliffhangers.
 2. Write one Audio Director prompt per segment. Keep the same speaker ID/reference and repeat a brief continuity note in each part.
 3. End segments with stitch-friendly tails such as static, room tone, channel scan, phone dropout, music bed, or fade. Start the next segment with a matching head.
-4. Generate each part separately and QA weak parts before assembling.
+4. Generate independent parts in parallel with `batch-generate` when possible. Use conservative bounded parallelism such as `--jobs 2` to `--jobs 4` unless the user explicitly wants faster, higher-concurrency generation.
 5. Use FFmpeg concat for hard cuts at silence/static, or short `acrossfade` only over ambience/music/static. Avoid crossfading spoken words.
 6. Run a final listen or multimodal feedback pass on the assembled output.
 
@@ -115,6 +115,14 @@ Generate a one-prompt mixed audio scene:
 python C:\Users\isund\.codex\skills\doubao-seed-audio\scripts\seed_audio.py generate --prompt "背景持续有低频发电机声和轻微电台底噪，音乐以极弱的合成器pad铺底，整体情绪紧张克制。先是一声短促电台静电。播音员（中老年男性，标准普通话，低沉厚实，字正腔圆，像资深电台主持）用沉稳严肃的语气说道：'这里是第七应急频段。请所有仍在收听的居民，立即远离地下停车区。' 对话中夹杂一次信号干扰和纸张翻动声。最后远处传来沉闷撞击声，播音员压低声音说道：'不要开门。' 随后信号突然切断。人声清楚靠前，不要让噪声盖住台词。" --speaker ICL_uranus_zh_male_cixingnansang_tob --format mp3 --sample-rate 24000 --output-dir C:\Users\isund\Documents\Codex\2026-07-05\ban\outputs
 ```
 
+Generate multiple long-audio segments in parallel:
+
+```powershell
+python C:\Users\isund\.codex\skills\doubao-seed-audio\scripts\seed_audio.py batch-generate --prompt-dir C:\path\episode_prompts --prompt-glob "part*.txt" --speaker ICL_uranus_zh_male_cixingnansang_tob --format mp3 --sample-rate 24000 --speech-rate -8 --jobs 3 --output-dir C:\path\episode_audio --show-config
+```
+
+Use repeated `--prompt-files` or `--prompt-list` when exact segment order matters and filenames do not sort naturally. The command returns a batch JSON with ordered `audio_paths` for later FFmpeg assembly.
+
 Generate voiceover with a speaker ID:
 
 ```powershell
@@ -159,7 +167,7 @@ python C:\Users\isund\.codex\skills\doubao-seed-audio\scripts\seed_audio.py gene
    - Reference audio generation: pass `--speaker`, `--audio`, or `--audio-url`. Speaker IDs count as audio references. Use `@音频1`, `@音频2`, etc. in prompt text for audio files/URLs according to reference order.
    - Reference image generation: pass `--image` or `--image-url`; the prompt describes the audio to synthesize from the image.
 2. Search `references/official-voice-list.md` with `voices` when the user asks for a role, accent, gender, scene, or emotion. Prefer `uranus_bigtts` or `ICL_uranus..._tob` voice IDs for this new API; older `moon_bigtts` / `mars_bigtts` IDs may appear in the official list but can be rejected by `seed-audio-1.0`.
-3. For one-prompt mixed scenes, use the Audio Director Prompting structure above and keep the full prompt within the provider limit. For longer works, create a segment map and one prompt per segment, then assemble with FFmpeg.
+3. For one-prompt mixed scenes, use the Audio Director Prompting structure above and keep the full prompt within the provider limit. For longer works, create a segment map and one prompt per segment, run `batch-generate` with bounded parallelism, then assemble with FFmpeg.
 4. Use `--enable-subtitle` when timing is needed for subtitles or lip-sync planning.
 5. For exact dialogue, keep each request short, use explicit "只朗读...读完立即停止" wording or `--strict-tts`, and verify the returned subtitle/audio. `seed-audio-1.0` can creatively continue medium-length speaker prompts even with strict wording.
 6. Keep generated outputs under the active thread `outputs` directory when possible.
