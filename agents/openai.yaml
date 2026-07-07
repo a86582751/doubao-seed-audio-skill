@@ -1,0 +1,3 @@
+display_name: Doubao Seed Audio
+short_description: Generate speech, ambience, and effects.
+default_prompt: Generate audio with Doubao Seed Audio.
